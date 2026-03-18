@@ -138,6 +138,11 @@ local function getExtMark(id, playState)
     local eventId = playState[id].eventId
     local colStart = playState[id].colStart
 
+    if marker.extMarks[eventId] then
+      print("AVAILABLE_COLS", eventId, vim.inspect(vim.tbl_keys(marker.extMarks[eventId])))
+      print("WANTED_COL", eventId, colStart)
+    end
+
     if marker.extMarks[eventId] and marker.extMarks[eventId][colStart] then
       extmark = marker.extMarks[eventId][colStart]
       extmark.id = playState[id].id
@@ -191,12 +196,12 @@ function PlayStateProcessor.handleEvents()
     else
       for _, event in pairs(activeEvents) do
         if
-          event ~= nil
-          and event.whole ~= nil
-          and removeCandidate.whole ~= nil
-          and event.colStart == removeCandidate.colStart
-          and event.eventId == removeCandidate.eventId
-          and event.whole.stop > removeCandidate.whole.stop
+            event ~= nil
+            and event.whole ~= nil
+            and removeCandidate.whole ~= nil
+            and event.colStart == removeCandidate.colStart
+            and event.eventId == removeCandidate.eventId
+            and event.whole.stop > removeCandidate.whole.stop
         then
           shallBeRemoved = false
         end
@@ -253,6 +258,9 @@ function PlayStateProcessor.parse(list)
       local extmark
       local eventId = parsed.eventId
       local colStart = parsed.colStart
+
+      print("PARSED", key, parsed.eventId, parsed.colStart, vim.inspect(parsed))
+      print("LOOKUP", parsed.eventId, parsed.colStart, vim.inspect(marker.extMarks[parsed.eventId]))
 
       if marker.extMarks[eventId] and marker.extMarks[eventId][colStart] then
         extmark = marker.extMarks[eventId][colStart]

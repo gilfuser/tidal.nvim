@@ -40,11 +40,16 @@ function Marker.createMarkers(ranges, lineNumber, eventId)
     Marker.extMarks = Marker.extMarks or {}
     Marker.extMarks[eventId] = Marker.extMarks[eventId] or {}
 
+    -- Keep the real span on the extmark (colStart..colEnd),
+    -- but index the same extmark by every column in that span.
+    -- Tidal playstate may report any column inside the token, not only colStart.
     if value.range_start > 0 then
       local line_text = vim.api.nvim_buf_get_lines(curr_buf, lineNumber - 1, lineNumber, false)[1] or ""
       local line_len = #line_text
       local safe_end_col = math.min(value.range_end, line_len)
 
+      -- print("MARKER", eventId, value.range_start, value.range_end, value.function_name, value.originalText,
+      -- value.quote_index)
       local markerId = vim.api.nvim_buf_set_extmark(curr_buf, Marker.ns, lineNumber - 1, value.range_start - 1, {
         end_row = lineNumber - 1,
         end_col = safe_end_col, -- until EOL
@@ -107,19 +112,19 @@ function Marker.print()
       for col, extmark in pairs(markers) do
         print(
           "MarkerId: "
-            .. extmark.markerId
-            .. " | eventId: "
-            .. eventId
-            .. " | Row: "
-            .. extmark.row
-            .. " | colStart: "
-            .. extmark.colStart
-            .. " | colEnd: "
-            .. extmark.colEnd
-            .. " | loopCol: "
-            .. col
-            .. " | functionName: "
-            .. extmark.functionName
+          .. extmark.markerId
+          .. " | eventId: "
+          .. eventId
+          .. " | Row: "
+          .. extmark.row
+          .. " | colStart: "
+          .. extmark.colStart
+          .. " | colEnd: "
+          .. extmark.colEnd
+          .. " | loopCol: "
+          .. col
+          .. " | functionName: "
+          .. extmark.functionName
         )
       end
     end
