@@ -1,5 +1,3 @@
-import Sound.Tidal.Pattern 
-import Sound.Tidal.Params (pR) 
 import Sound.Tidal.Stream.Types
 import GHC.Real (denominator, numerator)
 
@@ -45,26 +43,23 @@ prettyRat' r = ((show $ numerator r), (show $ denominator r))
 --     transformCtx x = map (\ ctx -> (fst $ fst ctx) (snd $ fst ctx) ) x
 
 createEventMsgPackObjects
-  :: Event Time (Map.Map String Value)
+  :: EventF (ArcF Rational) (Map.Map String Value)
   -> [((Int, Int), (Int, Int))]
   -> [String]
 createEventMsgPackObjects (Event _ (Just (Arc ws we)) _ e) contextPositions =
   [ showId e
   , show (transformCtx contextPositions)
-  , show eventId
-  , show (numerator ws)
-  , show (denominator ws)
-  , show (numerator we)
-  , show (denominator we)
+  , fst start, snd start
+  , fst stop,  snd stop
+  , fst note,  snd note
+  , showS e
   ]
   where
-    transformCtx :: [((Int, Int), (Int, Int))] -> [((Int, Int), (Int, Int))]
-    transformCtx = id
-
-    eventId =
-      case Map.lookup "_eventId_" e of
-        Just (VI n) -> n
-        _ -> 0
+    start = prettyRat' ws
+    stop  = prettyRat' we
+    note  = prettyRat' ( toRational (showNote e))
+    transformCtx :: [((Int, Int), (Int, Int))] -> [(Int, Int)]
+    transformCtx = map fst
 
 -- Show context of an event
 -- showEventAll' e = show (context e) ++ uncurry (++) (showEvent' e)
