@@ -31,49 +31,54 @@ Marker.removeCandidates = {}
 Marker.ns = vim.api.nvim_create_namespace("tidalEventHighlighting")
 
 ---Create all properties and metadata for ext marks
----@param ranges table<TidalWordRanges>
+---@param ranges table
 ---@param lineNumber integer
 ---@param eventId integer
 function Marker.createMarkers(ranges, lineNumber, eventId)
   local curr_buf = vim.api.nvim_get_current_buf()
+
   for _, value in ipairs(ranges) do
     Marker.extMarks = Marker.extMarks or {}
     Marker.extMarks[eventId] = Marker.extMarks[eventId] or {}
 
-    -- Keep the real span on the extmark (colStart..colEnd),
-    -- but index the same extmark by every column in that span.
-    -- Tidal playstate may report any column inside the token, not only colStart.
     if value.range_start > 0 then
-      local line_text = vim.api.nvim_buf_get_lines(curr_buf, lineNumber - 1, lineNumber, false)[1] or ""
+      local row = (value.row ~= nil) and value.row or (lineNumber - 1)
+
+      local line_text = vim.api.nvim_buf_get_lines(curr_buf, row, row + 1, false)[1] or ""
       local line_len = #line_text
       local safe_end_col = math.min(value.range_end, line_len)
 
-      -- print("MARKER", eventId, value.range_start, value.range_end, value.function_name, value.originalText,
-      -- value.quote_index)
-      local markerId = vim.api.nvim_buf_set_extmark(curr_buf, Marker.ns, lineNumber - 1, value.range_start - 1, {
-        end_row = lineNumber - 1,
-        end_col = safe_end_col, -- until EOL
+      local markerId = vim.api.nvim_buf_set_extmark(curr_buf, Marker.ns, row, value.range_start - 1, {
+        end_row = row,
+        end_col = safe_end_col,
       })
 
       local originalText = vim.api.nvim_buf_get_text(
         curr_buf,
-        lineNumber - 1,
+        row,
         value.range_start - 1,
-        lineNumber - 1,
+        row,
         safe_end_col,
         {}
       )[1] or ""
 
-      Marker.extMarks[eventId][value.range_start] = {
+      local extmark = {
         buf = curr_buf,
         markerId = markerId,
         colStart = value.range_start - 1,
         colEnd = value.range_end,
-        row = lineNumber - 1,
+        row = row,
         functionName = value.function_name,
         quoteIndex = value.quote_index,
         originalText = originalText,
-      } -- extmark
+      }
+
+      -- Keep the real span on the extmark (colStart..colEnd),
+      -- but index the same extmark by every 1-based column in that span.
+      -- Tidal playstate may report any column inside the token, not only range_start.
+      for col = value.range_start, value.range_end do
+        Marker.extMarks[eventId][col] = extmark
+      end
     end
   end
 end
