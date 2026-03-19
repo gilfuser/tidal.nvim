@@ -37,10 +37,10 @@ Marker.ns = vim.api.nvim_create_namespace("tidalEventHighlighting")
 function Marker.createMarkers(ranges, lineNumber, eventId)
   local curr_buf = vim.api.nvim_get_current_buf()
 
-  for _, value in ipairs(ranges) do
-    Marker.extMarks = Marker.extMarks or {}
-    Marker.extMarks[eventId] = Marker.extMarks[eventId] or {}
+  Marker.extMarks = Marker.extMarks or {}
+  Marker.extMarks[eventId] = Marker.extMarks[eventId] or {}
 
+  for _, value in ipairs(ranges) do
     if value.range_start > 0 then
       local row = (value.row ~= nil) and value.row or (lineNumber - 1)
 
@@ -73,11 +73,12 @@ function Marker.createMarkers(ranges, lineNumber, eventId)
         originalText = originalText,
       }
 
+      Marker.extMarks[eventId][row] = Marker.extMarks[eventId][row] or {}
+
       -- Keep the real span on the extmark (colStart..colEnd),
       -- but index the same extmark by every 1-based column in that span.
-      -- Tidal playstate may report any column inside the token, not only range_start.
       for col = value.range_start, value.range_end do
-        Marker.extMarks[eventId][col] = extmark
+        Marker.extMarks[eventId][row][col] = extmark
       end
     end
   end
@@ -96,44 +97,51 @@ function Marker.countNsExtmarks()
   return count
 end
 
---- Debug function to count all created extmarks
-function Marker.count()
-  local count = 0
-  if Marker.extMarks then
-    for _, markers in pairs(Marker.extMarks) do
-      for _, _ in pairs(markers) do
-        count = count + 1
+local function each_extmark(fn)
+  if not Marker.extMarks then
+    return
+  end
+
+  for eventId, rows in pairs(Marker.extMarks) do
+    for row, cols in pairs(rows) do
+      for col, extmark in pairs(cols) do
+        fn(eventId, row, col, extmark)
       end
     end
   end
+end
 
-  return count
+--- Debug function to count all created extmarks
+function Marker.count()
+  local n = 0
+
+  each_extmark(function(_, _, _, _)
+    n = n + 1
+  end)
+
+  return n
 end
 
 --- Debug function to print all created extmarks information
 function Marker.print()
-  if Marker.extMarks then
-    for eventId, markers in pairs(Marker.extMarks) do
-      for col, extmark in pairs(markers) do
-        print(
-          "MarkerId: "
-          .. extmark.markerId
-          .. " | eventId: "
-          .. eventId
-          .. " | Row: "
-          .. extmark.row
-          .. " | colStart: "
-          .. extmark.colStart
-          .. " | colEnd: "
-          .. extmark.colEnd
-          .. " | loopCol: "
-          .. col
-          .. " | functionName: "
-          .. extmark.functionName
-        )
-      end
-    end
-  end
+  each_extmark(function(eventId, row, col, extmark)
+    print(
+      "MarkerId: "
+      .. extmark.markerId
+      .. " | eventId: "
+      .. eventId
+      .. " | Row: "
+      .. row
+      .. " | colStart: "
+      .. extmark.colStart
+      .. " | colEnd: "
+      .. extmark.colEnd
+      .. " | loopCol: "
+      .. col
+      .. " | functionName: "
+      .. extmark.functionName
+    )
+  end)
 end
 
 function Marker.deleteAllMarkers()
@@ -152,32 +160,54 @@ end
 ---@param startRow integer
 ---@param endRow integer
 function Marker.setRemovables(startRow, endRow)
-  for eventId, markers in pairs(Marker.extMarks) do
-    for col, extmark in pairs(markers) do
-      local oldMarker = vim.api.nvim_buf_get_extmark_by_id(extmark.buf, Marker.ns, extmark.markerId, {})
+  local seen = {}
 
-      if oldMarker ~= nil then
-        local row = oldMarker[1] + 1
+  each_extmark(function(eventId, row, col, extmark)
+    local oldMarker = vim.api.nvim_buf_get_extmark_by_id(extmark.buf, Marker.ns, extmark.markerId, {})
 
-        if row >= startRow and row <= endRow then
-          table.insert(
-            Marker.removeCandidates,
-            { eventId = eventId, col = col, buf = extmark.buf, ns = Marker.ns, markerId = extmark.markerId }
-          )
+    if oldMarker ~= nil then
+      local markerRow = oldMarker[1] + 1
+
+      if markerRow >= startRow and markerRow <= endRow then
+        if not seen[extmark.markerId] then
+          seen[extmark.markerId] = true
+          table.insert(Marker.removeCandidates, {
+            eventId = eventId,
+            row = row,
+            col = col,
+            buf = extmark.buf,
+            ns = Marker.ns,
+            markerId = extmark.markerId,
+          })
         end
       end
     end
-  end
+  end)
 end
 
 ---Remove all markers within a given row range
 function Marker.cleanUpMarkers()
   for _, extmark in ipairs(Marker.removeCandidates) do
     vim.api.nvim_buf_del_extmark(extmark.buf, extmark.ns, extmark.markerId)
-    if Marker.extMarks[extmark.eventId] ~= nil then
-      Marker.extMarks[extmark.eventId][extmark.col] = nil
+
+    if Marker.extMarks[extmark.eventId] and Marker.extMarks[extmark.eventId][extmark.row] then
+      for col, indexed in pairs(Marker.extMarks[extmark.eventId][extmark.row]) do
+        if indexed.markerId == extmark.markerId then
+          Marker.extMarks[extmark.eventId][extmark.row][col] = nil
+        end
+      end
+
+      if next(Marker.extMarks[extmark.eventId][extmark.row]) == nil then
+        Marker.extMarks[extmark.eventId][extmark.row] = nil
+      end
+    end
+
+    if Marker.extMarks[extmark.eventId] and next(Marker.extMarks[extmark.eventId]) == nil then
+      Marker.extMarks[extmark.eventId] = nil
     end
   end
+
+  Marker.removeCandidates = {}
 end
 
 return Marker

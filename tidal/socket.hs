@@ -63,25 +63,32 @@ ratioToObject = ObjectFloat . fromRational
 -- },
 --
 
-createEventMsgPackObjects (Event _ (Just (Arc ws we)) a@(Arc ps pe) e) colStart eventId=
-  (ObjectMap $
-     V.fromList
-       [ (ObjectStr "id", ObjectStr (showId e))
-       , (ObjectStr "eventId", ObjectInt (eventId - 1))
-       , (ObjectStr "colStart", ObjectInt (colStart + 1))
-       , ( ObjectStr "whole"
-         , ObjectMap $
-             V.fromList
-               [ (ObjectStr "start", ratioToObject ws)
-               , (ObjectStr "stop", ratioToObject we)
-               ]
-         )
-       ]
-  )
+createEventMsgPackObjects
+  :: EventF (ArcF Rational) (Map.Map String Value)
+  -> Int
+  -> Int
+  -> Int
+  -> Object
+createEventMsgPackObjects (Event _ (Just (Arc ws we)) _ e) colStart rowStart eventId = ObjectMap $ V.fromList
+    [ (ObjectStr "id", ObjectStr (showId e))
+    , (ObjectStr "eventId", ObjectInt eventId)
+    , (ObjectStr "rowStart", ObjectInt rowStart)
+    , (ObjectStr "colStart", ObjectInt (colStart + 1))
+    , ( ObjectStr "whole"
+      , ObjectMap $ V.fromList
+          [ (ObjectStr "start", ratioToObject ws)
+          , (ObjectStr "stop", ratioToObject we)
+          ]
+      )
+    ]
 
 -- Show context of an event
 -- showEventAll' e = show (context e) ++ uncurry (++) (showEvent' e)
-createAllEventMsgPackObjects e = map (\ ctx -> createEventMsgPackObjects e (fst $ fst ctx) (snd $ fst ctx) ) (contextPosition $ context e)
+createAllEventMsgPackObjects e = let eid = case Data.Map.lookup "_eventId_" (value e) of
+              Just (VI n) -> fromIntegral n
+              _ -> 0
+   in map (\ctx -> createEventMsgPackObjects e (fst $ fst ctx) (snd $ fst ctx) eid)
+          (contextPosition $ context e)
 
 -- Show everything, including event context
 -- showAll' :: [Event ValueMap] -> String

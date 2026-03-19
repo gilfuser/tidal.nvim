@@ -27,14 +27,13 @@ function M.mapEvent(plain)
   -- 1. Extract the leading id (before first comma)
   local id = plain:match("^([^,]+),")
 
-  local plainCtx = (plain:match("%[(.-)%]"))
-
+  local plainCtx = plain:match("%[(.-)%]")
   if plainCtx == nil then
     return {}
   end
 
   -- 2. Extract the event list inside [ ... ]
-  local wrappedPlainCtx = ("[" .. plainCtx .. "]")
+  local wrappedPlainCtx = "[" .. plainCtx .. "]"
   local ctxs = M.mapCtx(wrappedPlainCtx)
 
   -- 3. Extract all remaining numeric fields AFTER the event list
@@ -50,24 +49,28 @@ function M.mapEvent(plain)
     end
   end
 
-  -- We only care about:
-  -- numbers[1] / numbers[2] = start
-  -- numbers[3] / numbers[4] = stop
-  local startNum = numbers[1] or 0
-  local startDen = numbers[2] or 1
-  local stopNum = numbers[3] or 0
-  local stopDen = numbers[4] or 1
+  -- New layout:
+  -- numbers[1] = eventId
+  -- numbers[2] / numbers[3] = start
+  -- numbers[4] / numbers[5] = stop
+  local eventId = numbers[1] or 0
+
+  local startNum = numbers[2] or 0
+  local startDen = numbers[3] or 1
+  local stopNum = numbers[4] or 0
+  local stopDen = numbers[5] or 1
 
   local wholeStart = startNum / startDen
   local wholeStop = stopNum / stopDen
 
-  -- 4. Parse each (col, len) pair inside the event list
+  -- 4. Parse each (col, row) pair inside the event list
   for _, ctx in ipairs(ctxs) do
     local eventKey = M.genEventId()
 
     result[eventKey] = {
       id = id,
       eventId = ctx[2] - 1,
+      rowStart = ctx[2],
       colStart = ctx[1] + 1,
       whole = {
         start = wholeStart,

@@ -136,16 +136,27 @@ local function getExtMark(id, playState)
 
   if playState[id] ~= nil then
     local eventId = playState[id].eventId
+    local rowStart = playState[id].rowStart
     local colStart = playState[id].colStart
 
-    if marker.extMarks[eventId] then
-      print("AVAILABLE_COLS", eventId, vim.inspect(vim.tbl_keys(marker.extMarks[eventId])))
-      print("WANTED_COL", eventId, colStart)
+    -- Preferred lookup: eventId + row + col
+    if eventId ~= nil
+        and marker.extMarks[eventId]
+        and marker.extMarks[eventId][rowStart]
+        and marker.extMarks[eventId][rowStart][colStart]
+    then
+      extmark = marker.extMarks[eventId][rowStart][colStart]
+      extmark.id = playState[id].id
+      return extmark
     end
 
-    if marker.extMarks[eventId] and marker.extMarks[eventId][colStart] then
-      extmark = marker.extMarks[eventId][colStart]
-      extmark.id = playState[id].id
+    -- Fallback: search any eventId that has this row+col
+    for _, rows in pairs(marker.extMarks or {}) do
+      if rows[rowStart] and rows[rowStart][colStart] then
+        extmark = rows[rowStart][colStart]
+        extmark.id = playState[id].id
+        return extmark
+      end
     end
   end
 
@@ -254,16 +265,30 @@ function PlayStateProcessor.parse(list)
 
   for _, raw in ipairs(list) do
     for key, parsed in pairs(playStateParser.parse(raw)) do
-      -- Enricht parsed result with extmark data
       local extmark
       local eventId = parsed.eventId
+      local rowStart = parsed.rowStart
       local colStart = parsed.colStart
 
-      print("PARSED", key, parsed.eventId, parsed.colStart, vim.inspect(parsed))
-      print("LOOKUP", parsed.eventId, parsed.colStart, vim.inspect(marker.extMarks[parsed.eventId]))
+      -- print("PARSED", key, parsed.eventId, parsed.rowStart, parsed.colStart, vim.inspect(parsed))
 
-      if marker.extMarks[eventId] and marker.extMarks[eventId][colStart] then
-        extmark = marker.extMarks[eventId][colStart]
+      if eventId ~= nil
+          and rowStart ~= nil
+          and marker.extMarks[eventId]
+          and marker.extMarks[eventId][rowStart]
+          and marker.extMarks[eventId][rowStart][colStart]
+      then
+        extmark = marker.extMarks[eventId][rowStart][colStart]
+      else
+        for _, rows in pairs(marker.extMarks or {}) do
+          if rows[rowStart] and rows[rowStart][colStart] then
+            extmark = rows[rowStart][colStart]
+            break
+          end
+        end
+      end
+
+      if extmark then
         parsed.fun = extmark.functionName
         parsed.val = extmark.originalText
       end

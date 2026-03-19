@@ -45,23 +45,26 @@ prettyRat' r = ((show $ numerator r), (show $ denominator r))
 --     transformCtx x = map (\ ctx -> (fst $ fst ctx) (snd $ fst ctx) ) x
 
 createEventMsgPackObjects
-  :: EventF (ArcF Rational) (Map.Map String Value)
+  :: Event Time (Map.Map String Value)
   -> [((Int, Int), (Int, Int))]
   -> [String]
 createEventMsgPackObjects (Event _ (Just (Arc ws we)) _ e) contextPositions =
   [ showId e
   , show (transformCtx contextPositions)
-  , fst start, snd start
-  , fst stop,  snd stop
-  , fst note,  snd note
-  , showS e
+  , show eventId
+  , show (numerator ws)
+  , show (denominator ws)
+  , show (numerator we)
+  , show (denominator we)
   ]
   where
-    start = prettyRat' ws
-    stop  = prettyRat' we
-    note  = prettyRat' ( toRational (showNote e))
-    transformCtx :: [((Int, Int), (Int, Int))] -> [(Int, Int)]
-    transformCtx = map fst
+    transformCtx :: [((Int, Int), (Int, Int))] -> [((Int, Int), (Int, Int))]
+    transformCtx = id
+
+    eventId =
+      case Map.lookup "_eventId_" e of
+        Just (VI n) -> n
+        _ -> 0
 
 -- Show context of an event
 -- showEventAll' e = show (context e) ++ uncurry (++) (showEvent' e)
