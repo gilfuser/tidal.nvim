@@ -341,24 +341,77 @@ local function emitQuotedRanges(block, callback)
       endPos = i
     else
       if startPos ~= nil and endPos ~= nil then
-        callback({
-          range_start = startPos,
-          range_end = endPos,
-          function_name = block.function_name or "",
-          quote_index = block.quote_index,
-        })
+        if block.lines then
+          local rowStart, colStart = abs_to_row_col(block.lines, startPos)
+          local _, colEnd = abs_to_row_col(block.lines, endPos)
+          callback({
+            row = rowStart,
+            range_start = colStart + 1,
+            range_end = colEnd + 1,
+            abs_start = startPos,
+            abs_end = endPos,
+            function_name = block.function_name or "",
+            quote_index = block.quote_index,
+          })
+        else
+          callback({
+            range_start = startPos,
+            range_end = endPos,
+            abs_start = startPos,
+            abs_end = endPos,
+            function_name = block.function_name or "",
+            quote_index = block.quote_index,
+          })
+        end
       end
       startPos, endPos = nil, nil
     end
   end
 
   if startPos ~= nil and endPos ~= nil then
-    callback({
-      range_start = startPos,
-      range_end = endPos,
-      function_name = block.function_name or "",
-      quote_index = block.quote_index,
-    })
+    if block.lines then
+      local rowStart, colStart = abs_to_row_col(block.lines, startPos)
+      local _, colEnd = abs_to_row_col(block.lines, endPos)
+      callback({
+        row = rowStart,
+        range_start = colStart + 1,
+        range_end = colEnd + 1,
+        abs_start = startPos,
+        abs_end = endPos,
+        function_name = block.function_name or "",
+        quote_index = block.quote_index,
+      })
+    else
+      callback({
+        range_start = startPos,
+        range_end = endPos,
+        abs_start = startPos,
+        abs_end = endPos,
+        function_name = block.function_name or "",
+        quote_index = block.quote_index,
+      })
+    end
+  end
+
+  if startPos ~= nil and endPos ~= nil then
+    if block.lines then
+      local rowStart, colStart = abs_to_row_col(block.lines, startPos)
+      local _, colEnd = abs_to_row_col(block.lines, endPos)
+      callback({
+        row = rowStart,
+        range_start = colStart + 1,
+        range_end = colEnd + 1,
+        function_name = block.function_name or "",
+        quote_index = block.quote_index,
+      })
+    else
+      callback({
+        range_start = startPos,
+        range_end = endPos,
+        function_name = block.function_name or "",
+        quote_index = block.quote_index,
+      })
+    end
   end
 end
 
@@ -368,6 +421,36 @@ local function emitMondoRanges(block, callback)
   local expectingControl = true
   local text = block.content
   local base = block.inner_start - 1
+
+  -- Precompute content lines for abs_start calculation
+  local contentLines = {}
+  local cumOffset = 0
+  for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+    table.insert(contentLines, {
+      text = line,
+      offset = cumOffset,
+      leading = #(line:match("^(%s*)") or ""),
+    })
+    cumOffset = cumOffset + #line + 1
+  end
+
+  -- Determine prefixLen from block geometry
+  local prefixLen = block.inner_start - block.start_pos
+
+  local function computeAbsStart(tokenStart, tokenEnd)
+    local contentOffset = tokenStart - block.inner_start -- 0-based offset in content
+    for _, cl in ipairs(contentLines) do
+      if cl.offset + #cl.text > contentOffset then
+        local posInLine = contentOffset - cl.offset -- 0-based position in content line
+        local strippedPos = posInLine - cl.leading  -- 0-based position in stripped line
+        local haskellPos = (block.start_pos - 1) + prefixLen + (strippedPos + 1)
+        local absStart = haskellPos + 1             -- 1-based for marker index
+        local absEnd = absStart + (tokenEnd - tokenStart)
+        return absStart, absEnd
+      end
+    end
+    return nil, nil
+  end
 
   local function char_at_abs(abs_pos)
     return text:sub(abs_pos - base, abs_pos - base)
@@ -401,11 +484,14 @@ local function emitMondoRanges(block, callback)
       else
         local rowStart, colStart = abs_to_row_col(block.lines, tokenStart)
         local _, colEnd = abs_to_row_col(block.lines, tokenEnd)
+        local absStart, absEnd = computeAbsStart(tokenStart, tokenEnd)
 
         callback({
           row = rowStart,
-          range_start = colStart,
-          range_end = colEnd,
+          range_start = colStart + 1,
+          range_end = colEnd + 1,
+          abs_start = absStart,
+          abs_end = absEnd,
           function_name = currentControl or block.function_name or "",
           originalText = token,
           quote_index = block.quote_index,
@@ -422,7 +508,7 @@ end
 function TextProcessor.findTidalWordRanges(text, callback)
   TextProcessor.findControlPatternRangesInText(text, function(block)
     if block.kind == "quote" then
-      -- pode adaptar depois se quiser row/col em strings também
+      emitQuotedRanges(block, callback)
     elseif block.kind == "mondo" then
       emitMondoRanges(block, callback)
     end

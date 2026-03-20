@@ -124,9 +124,14 @@ local function getExtMark(id, playState)
     local eventId = playState[id].eventId
     local colStart = playState[id].colStart
 
-    if marker.extMarks[eventId] and marker.extMarks[eventId][colStart] then
-      extmark = marker.extMarks[eventId][colStart]
-      extmark.id = playState[id].id
+    if eventId ~= nil and marker.extMarks[eventId] then
+      for _, cols in pairs(marker.extMarks[eventId]) do
+        if type(cols) == "table" and cols[colStart] then
+          extmark = cols[colStart]
+          extmark.id = playState[id].id
+          return extmark
+        end
+      end
     end
   end
 
@@ -177,12 +182,12 @@ function PlayStateProcessor.handleEvents()
     else
       for _, event in pairs(activeEvents) do
         if
-          event ~= nil
-          and event.whole ~= nil
-          and removeCandidate.whole ~= nil
-          and event.colStart == removeCandidate.colStart
-          and event.eventId == removeCandidate.eventId
-          and event.whole.stop > removeCandidate.whole.stop
+            event ~= nil
+            and event.whole ~= nil
+            and removeCandidate.whole ~= nil
+            and event.colStart == removeCandidate.colStart
+            and event.eventId == removeCandidate.eventId
+            and event.whole.stop > removeCandidate.whole.stop
         then
           shallBeRemoved = false
         end
@@ -308,6 +313,7 @@ function PlayStateProcessor.launch()
 
   print("Tidal socket server listening on " .. socket_path)
 end
+
 --   -- EXTEND
 --       PlayStateProcessor._lastReceivedPlayState = output
 --

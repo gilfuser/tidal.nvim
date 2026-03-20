@@ -17,15 +17,15 @@ local function splice_replacements(line, replacements)
   return out
 end
 
-function Tokenizer.addDeltaContext(line, eventId)
-  if line:match("^:") then
-    return line
+function Tokenizer.addDeltaContext(text, eventId)
+  if text:match("^:") then
+    return text
   end
 
   local replacements = {}
 
-  lineProcessor.findControlPatternRanges(line, function(block)
-    local before = line:sub(1, block.start_pos - 1)
+  lineProcessor.findControlPatternRangesInText(text, function(block)
+    local before = text:sub(1, block.start_pos - 1)
 
     if before:match(lineProcessor.exceptedFunctionPatterns()) then
       return
@@ -38,7 +38,7 @@ function Tokenizer.addDeltaContext(line, eventId)
         replacement = string.format('(deltaContext %i %i "%s")', block.start_pos - 1, eventId, block.content),
       })
     elseif block.kind == "mondo" then
-      local expr = line:sub(block.start_pos, block.end_pos)
+      local expr = text:sub(block.start_pos, block.end_pos)
       table.insert(replacements, {
         start_pos = block.start_pos,
         end_pos = block.end_pos,
@@ -48,10 +48,10 @@ function Tokenizer.addDeltaContext(line, eventId)
   end)
 
   if #replacements == 0 then
-    return line
+    return text
   end
 
-  return splice_replacements(line, replacements)
+  return splice_replacements(text, replacements)
 end
 
 local function findReplacementRanges(line)
@@ -69,7 +69,9 @@ end
 function Tokenizer.addMetadata(text, startRow)
   local replacements = {}
   lineProcessor.findTidalWordRanges(text, function(replacement)
-    replacement.row = (startRow or 0) + replacement.row
+    if replacement.row ~= nil then
+      replacement.row = (startRow or 1) + replacement.row - 1 -- resultado 0-based
+    end
     table.insert(replacements, replacement)
   end)
 

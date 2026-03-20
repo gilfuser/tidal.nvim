@@ -135,11 +135,21 @@ local function getExtMark(id, playState)
   local extmark
 
   if playState[id] ~= nil then
-    local eventId = playState[id].eventId
-    local rowStart = playState[id].rowStart
     local colStart = playState[id].colStart
 
-    -- Preferred lookup: eventId + row + col
+    -- Primary lookup: absolute position (works for both single-line and multiline)
+    for _, data in pairs(marker.extMarks or {}) do
+      if data["abs"] and data["abs"][colStart] then
+        extmark = data["abs"][colStart]
+        extmark.id = playState[id].id
+        return extmark
+      end
+    end
+
+    -- Fallback: row + col lookup
+    local eventId = playState[id].eventId
+    local rowStart = playState[id].rowStart
+
     if eventId ~= nil
         and marker.extMarks[eventId]
         and marker.extMarks[eventId][rowStart]
@@ -150,9 +160,9 @@ local function getExtMark(id, playState)
       return extmark
     end
 
-    -- Fallback: search any eventId that has this row+col
+    -- Fallback 2: any eventId with this row+col
     for _, rows in pairs(marker.extMarks or {}) do
-      if rows[rowStart] and rows[rowStart][colStart] then
+      if type(rows) == "table" and rows[rowStart] and rows[rowStart][colStart] then
         extmark = rows[rowStart][colStart]
         extmark.id = playState[id].id
         return extmark
@@ -266,24 +276,34 @@ function PlayStateProcessor.parse(list)
   for _, raw in ipairs(list) do
     for key, parsed in pairs(playStateParser.parse(raw)) do
       local extmark
-      local eventId = parsed.eventId
-      local rowStart = parsed.rowStart
       local colStart = parsed.colStart
 
-      -- print("PARSED", key, parsed.eventId, parsed.rowStart, parsed.colStart, vim.inspect(parsed))
+      -- Primary: absolute position lookup
+      for _, data in pairs(marker.extMarks or {}) do
+        if data["abs"] and data["abs"][colStart] then
+          extmark = data["abs"][colStart]
+          break
+        end
+      end
 
-      if eventId ~= nil
-          and rowStart ~= nil
-          and marker.extMarks[eventId]
-          and marker.extMarks[eventId][rowStart]
-          and marker.extMarks[eventId][rowStart][colStart]
-      then
-        extmark = marker.extMarks[eventId][rowStart][colStart]
-      else
-        for _, rows in pairs(marker.extMarks or {}) do
-          if rows[rowStart] and rows[rowStart][colStart] then
-            extmark = rows[rowStart][colStart]
-            break
+      -- Fallback: row + col
+      if not extmark then
+        local eventId = parsed.eventId
+        local rowStart = parsed.rowStart
+
+        if eventId ~= nil
+            and rowStart ~= nil
+            and marker.extMarks[eventId]
+            and marker.extMarks[eventId][rowStart]
+            and marker.extMarks[eventId][rowStart][colStart]
+        then
+          extmark = marker.extMarks[eventId][rowStart][colStart]
+        else
+          for _, rows in pairs(marker.extMarks or {}) do
+            if type(rows) == "table" and rows[rowStart] and rows[rowStart][colStart] then
+              extmark = rows[rowStart][colStart]
+              break
+            end
           end
         end
       end

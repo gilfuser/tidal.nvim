@@ -75,7 +75,7 @@ function Repl:attach(pipe, label)
       end
 
       for _, line in ipairs(complete) do
-        if line:sub(-#"_START") == "_START" then
+        if line:sub(- #"_START") == "_START" then
           isLocked = true
         end
       end
@@ -84,7 +84,7 @@ function Repl:attach(pipe, label)
         for _, line in ipairs(complete) do
           table.insert(self.lockedStdOut, line)
 
-          if line:sub(-#"_END") == "_END" then
+          if line:sub(- #"_END") == "_END" then
             self.onDataProcessed(self.lockedStdOut)
             self.lockedStdOut = {}
             isLocked = false
@@ -164,40 +164,70 @@ end
 --- @return T for method chaining
 function Repl:send(text, start)
   if start then
-    local enrichedText = {}
-    local rowIndex = 0
     local rowStart = start[1] + 1
 
+    -- Split into lines
+    local allLines = {}
     for line in text:gmatch("[^\r\n]+") do
-      local enrichedLine = tokenizer.addMetadata(line, rowStart + rowIndex)
-      table.insert(enrichedText, enrichedLine)
-      rowIndex = rowIndex + 1
-
-      if line:match("^hush") ~= nil then
-        marker.deleteAllMarkers()
-        tokenizer.lastEventId = 0
-
-        vim.api.nvim_exec_autocmds("User", { pattern = "TidalHush", modeline = false })
-      end
+      table.insert(allLines, line)
     end
 
-    text = table.concat(enrichedText, "\n") .. "\n"
+    -- Separate :{ / :} from inner content
+    local hasMultiline = #allLines >= 3
+        and allLines[1] == ":{"
+        and allLines[#allLines] == ":}"
+
+    if hasMultiline then
+      -- Extract inner lines (skip :{ and :})
+      local innerLines = {}
+      for i = 2, #allLines - 1 do
+        table.insert(innerLines, allLines[i])
+      end
+
+      local fullText = table.concat(innerLines, "\n")
+      -- rowStart points to the :{ line; inner content starts one line later
+      local enriched = tokenizer.addMetadata(fullText, rowStart + 1)
+
+      -- Check for hush
+      for _, line in ipairs(innerLines) do
+        if line:match("^hush") then
+          marker.deleteAllMarkers()
+          tokenizer.lastEventId = 0
+          vim.api.nvim_exec_autocmds("User", { pattern = "TidalHush", modeline = false })
+        end
+      end
+
+      text = ":{\n" .. enriched .. "\n:}\n"
+    else
+      -- Single-line or no :{ :} wrapping: process line by line as before
+      local enrichedText = {}
+      local rowIndex = 0
+
+      for _, line in ipairs(allLines) do
+        local enrichedLine = tokenizer.addMetadata(line, rowStart + rowIndex)
+        table.insert(enrichedText, enrichedLine)
+        rowIndex = rowIndex + 1
+
+        if line:match("^hush") ~= nil then
+          marker.deleteAllMarkers()
+          tokenizer.lastEventId = 0
+          vim.api.nvim_exec_autocmds("User", { pattern = "TidalHush", modeline = false })
+        end
+      end
+
+      text = table.concat(enrichedText, "\n") .. "\n"
+    end
   end
 
-  -- vim.notify("[tidal-fast] Repl send received", vim.log.levels.INFO)
   if self.stdin and not self.stdin:is_closing() then
     self.stdin:write(text)
-
     self.sendCallback()
   end
 
   if self.proc == nil then
-    -- not running - error?
     return self
   end
 
-  --vim.api.nvim_chan_send(self.proc, text)
-  --self.buf:scroll_to_bottom()
   return self
 end
 

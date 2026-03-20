@@ -46,39 +46,49 @@ function Marker.createMarkers(ranges, lineNumber, eventId)
 
       local line_text = vim.api.nvim_buf_get_lines(curr_buf, row, row + 1, false)[1] or ""
       local line_len = #line_text
+      local safe_start_col = math.min(value.range_start - 1, math.max(0, line_len - 1))
       local safe_end_col = math.min(value.range_end, line_len)
 
-      local markerId = vim.api.nvim_buf_set_extmark(curr_buf, Marker.ns, row, value.range_start - 1, {
-        end_row = row,
-        end_col = safe_end_col,
-      })
+      if safe_start_col < safe_end_col then
+        local markerId = vim.api.nvim_buf_set_extmark(curr_buf, Marker.ns, row, safe_start_col, {
+          end_row = row,
+          end_col = safe_end_col,
+        })
 
-      local originalText = vim.api.nvim_buf_get_text(
-        curr_buf,
-        row,
-        value.range_start - 1,
-        row,
-        safe_end_col,
-        {}
-      )[1] or ""
+        local originalText = vim.api.nvim_buf_get_text(
+          curr_buf,
+          row,
+          safe_start_col,
+          row,
+          safe_end_col,
+          {}
+        )[1] or ""
 
-      local extmark = {
-        buf = curr_buf,
-        markerId = markerId,
-        colStart = value.range_start - 1,
-        colEnd = value.range_end,
-        row = row,
-        functionName = value.function_name,
-        quoteIndex = value.quote_index,
-        originalText = originalText,
-      }
+        local extmark = {
+          buf = curr_buf,
+          markerId = markerId,
+          colStart = safe_start_col,
+          colEnd = value.range_end,
+          row = row,
+          functionName = value.function_name,
+          quoteIndex = value.quote_index,
+          originalText = originalText,
+        }
 
-      Marker.extMarks[eventId][row] = Marker.extMarks[eventId][row] or {}
+        Marker.extMarks[eventId][row] = Marker.extMarks[eventId][row] or {}
 
-      -- Keep the real span on the extmark (colStart..colEnd),
-      -- but index the same extmark by every 1-based column in that span.
-      for col = value.range_start, value.range_end do
-        Marker.extMarks[eventId][row][col] = extmark
+        -- Index by per-line column (existing)
+        for col = value.range_start, value.range_end do
+          Marker.extMarks[eventId][row][col] = extmark
+        end
+
+        -- Index by absolute position (new, for multiline lookup)
+        if value.abs_start and value.abs_end then
+          Marker.extMarks[eventId]["abs"] = Marker.extMarks[eventId]["abs"] or {}
+          for absCol = value.abs_start, value.abs_end do
+            Marker.extMarks[eventId]["abs"][absCol] = extmark
+          end
+        end
       end
     end
   end
@@ -104,8 +114,10 @@ local function each_extmark(fn)
 
   for eventId, rows in pairs(Marker.extMarks) do
     for row, cols in pairs(rows) do
-      for col, extmark in pairs(cols) do
-        fn(eventId, row, col, extmark)
+      if type(row) == "number" then -- skip "abs" key
+        for col, extmark in pairs(cols) do
+          fn(eventId, row, col, extmark)
+        end
       end
     end
   end
@@ -199,6 +211,19 @@ function Marker.cleanUpMarkers()
 
       if next(Marker.extMarks[extmark.eventId][extmark.row]) == nil then
         Marker.extMarks[extmark.eventId][extmark.row] = nil
+      end
+    end
+
+    -- Also clean up the "abs" index
+    if Marker.extMarks[extmark.eventId] and Marker.extMarks[extmark.eventId]["abs"] then
+      for absCol, indexed in pairs(Marker.extMarks[extmark.eventId]["abs"]) do
+        if indexed.markerId == extmark.markerId then
+          Marker.extMarks[extmark.eventId]["abs"][absCol] = nil
+        end
+      end
+
+      if next(Marker.extMarks[extmark.eventId]["abs"]) == nil then
+        Marker.extMarks[extmark.eventId]["abs"] = nil
       end
     end
 
